@@ -39,9 +39,13 @@ async fn disconnect<'a>(id: usize, mitches: State<'a, Mitches>) -> Result<(), er
 }
 
 #[tauri::command]
-async fn start_recording<'a>(id: usize, mitches: State<'a, Mitches>) -> Result<(), ()> {
+async fn start_recording<'a>(
+    id: usize,
+    recording: Recording,
+    mitches: State<'a, Mitches>,
+) -> Result<(), ()> {
     mitches.inner.lock().await[id]
-        .start_recording(Recording::Pressure)
+        .start_recording(recording)
         .await
         .unwrap();
     Ok(())

@@ -1,7 +1,8 @@
 use super::mitch::MyInfo;
 use lsl::StreamInfo;
+use serde::Deserialize;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 pub enum Recording {
     Accelerometry,
     Pressure,

@@ -3,6 +3,7 @@
 	import { invoke } from "@tauri-apps/api/core";
 	import { listen } from "@tauri-apps/api/event";
 	import { onMount } from "svelte";
+	import MitchModal from "./MitchModal.svelte";
 
 	type MitchDiscovered = {
 		name: string;
@@ -30,16 +31,16 @@
 	});
 	async function start_recording() {
 		try {
-			await invoke("start_recording", { id: selected});
-			details = await invoke("get_mitch_details", { id: selected});
+			await invoke("start_recording", { id: selected });
+			details = await invoke("get_mitch_details", { id: selected });
 		} catch (e) {
 			console.log(e);
 		}
 	}
 	async function stop_recording() {
 		try {
-			await invoke("stop_recording", { id: selected});
-			details = await invoke("get_mitch_details", { id: selected});
+			await invoke("stop_recording", { id: selected });
+			details = await invoke("get_mitch_details", { id: selected });
 		} catch (e) {
 			console.log(e);
 		}
@@ -72,10 +73,6 @@
 		} catch (e) {
 			console.log(e);
 		}
-	}
-
-	function modalClose() {
-		details= undefined;
 	}
 </script>
 
@@ -134,40 +131,7 @@
 							backdropClasses="backdrop-blur-sm"
 						>
 							{#snippet content()}
-								{#if details}
-									<header class="flex justify-between">
-										<h2 class="h2">{details.name}</h2>
-									</header>
-									<article>
-										<p class="opacity-60">
-											{details.state}
-										</p>
-									</article>
-									<footer class="flex justify-end gap-4">
-										<button
-											type="button"
-											class="btn preset-tonal"
-											onclick={modalClose}>Cancel</button
-										>
-										{#if details.state !== "SysTx"}
-											<button
-												type="button"
-												class="btn preset-filled"
-												onclick={async () =>
-													await start_recording()}
-												>Start Recording</button
-											>
-										{:else}
-											<button
-												type="button"
-												class="btn preset-filled"
-												onclick={async () =>
-													await stop_recording()}
-												>Stop Recording</button
-											>
-										{/if}
-									</footer>
-								{/if}
+								<MitchModal bind:details id={selected} />
 							{/snippet}
 						</Modal>
 					{:else}

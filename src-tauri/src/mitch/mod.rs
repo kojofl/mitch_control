@@ -2,13 +2,14 @@ use std::{collections::HashSet, process::exit};
 
 use btleplug::{
     api::{Central as _, CentralEvent, CentralState, Manager as _, Peripheral as _, ScanFilter},
-    platform::{Adapter, Manager, Peripheral},
+    platform::{Adapter, Manager},
 };
 use futures::StreamExt as _;
 use mitch::Mitch;
 use serde::Serialize;
 use tauri::{async_runtime::Mutex, AppHandle, Emitter, Manager as _};
 pub mod mitch;
+pub mod recording;
 
 #[derive(Default)]
 pub struct Mitches {

@@ -1,4 +1,4 @@
-use mitch::{mitch::Mitch, Mitches};
+use mitch::{mitch::SerializableMitch, recording::Recording, Mitches};
 use tauri::{async_runtime::spawn, Manager as _, State};
 
 pub mod errors;
@@ -6,16 +6,19 @@ pub mod mitch;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
-async fn get_mitches<'a>(mitches: State<'a, Mitches>) -> Result<Vec<Mitch>, ()> {
-    let mitches = mitches.inner.lock().await.to_vec();
+async fn get_mitches<'a>(mitches: State<'a, Mitches>) -> Result<Vec<SerializableMitch>, ()> {
+    let mitches: Vec<SerializableMitch> =
+        mitches.inner.lock().await.iter().map(Into::into).collect();
     println!("{:?}", mitches);
     Ok(mitches)
 }
-//
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+
 #[tauri::command]
-async fn get_mitch_details<'a>(id: usize, mitches: State<'a, Mitches>) -> Result<Mitch, ()> {
-    Ok(mitches.inner.lock().await[id].clone())
+async fn get_mitch_details<'a>(
+    id: usize,
+    mitches: State<'a, Mitches>,
+) -> Result<SerializableMitch, ()> {
+    Ok(mitches.inner.lock().await.get(id).unwrap().into())
 }
 
 #[tauri::command]
@@ -38,7 +41,7 @@ async fn disconnect<'a>(id: usize, mitches: State<'a, Mitches>) -> Result<(), er
 #[tauri::command]
 async fn start_recording<'a>(id: usize, mitches: State<'a, Mitches>) -> Result<(), ()> {
     mitches.inner.lock().await[id]
-        .start_recording()
+        .start_recording(Recording::Pressure)
         .await
         .unwrap();
     Ok(())

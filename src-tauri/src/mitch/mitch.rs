@@ -1,10 +1,11 @@
 use std::{error::Error, sync::Arc};
 
+use super::recording::Recording;
 use btleplug::{
     api::{Peripheral as _, WriteType},
     platform::Peripheral,
 };
-use futures::StreamExt as _;
+use futures::{executor::block_on, StreamExt as _};
 use lsl::{Pushable as _, StreamInfo, StreamOutlet};
 use serde::Serialize;
 use tauri::async_runtime::{spawn, JoinHandle};
@@ -24,22 +25,35 @@ pub struct Mitch {
     handle: Option<Arc<JoinHandle<()>>>,
 }
 
-struct MyInfo(StreamInfo);
+#[derive(Clone, Serialize, Debug)]
+pub struct SerializableMitch {
+    pub name: String,
+    connected: bool,
+    state: Option<MitchState>,
+}
+
+impl From<&Mitch> for SerializableMitch {
+    fn from(value: &Mitch) -> Self {
+        Self {
+            name: value.name.clone(),
+            connected: value.connected,
+            state: value.state,
+        }
+    }
+}
+
+impl Drop for Mitch {
+    fn drop(&mut self) {
+        if self.connected {
+            let _ = block_on(self.disconnect());
+        }
+    }
+}
+
+pub struct MyInfo(StreamInfo);
 unsafe impl Send for MyInfo {}
 impl MyInfo {
-    pub fn new(name: &str) -> Self {
-        let mut info =
-            StreamInfo::new(name, "Motion", 3, 50.0, lsl::ChannelFormat::Double64, name).unwrap();
-        let mut chnls = info.desc().append_child("channels");
-        chnls
-            .append_child("channel")
-            .append_child_value("label", "x_acc");
-        chnls
-            .append_child("channel")
-            .append_child_value("label", "y_acc");
-        chnls
-            .append_child("channel")
-            .append_child_value("label", "z_acc");
+    pub fn from_info(info: StreamInfo) -> Self {
         Self(info)
     }
 }
@@ -81,15 +95,26 @@ impl TryFrom<u8> for MitchState {
 
 enum Commands {
     GetState,
-    StartStream,
+    StartAccelerometryStream,
+    StartPressureStream,
     StopStream,
+}
+
+impl From<Recording> for Commands {
+    fn from(value: Recording) -> Self {
+        match value {
+            Recording::Accelerometry => Self::StartAccelerometryStream,
+            Recording::Pressure => Self::StartPressureStream,
+        }
+    }
 }
 
 impl AsRef<[u8]> for Commands {
     fn as_ref(&self) -> &[u8] {
         match self {
             Commands::GetState => &[130, 0],
-            Commands::StartStream => &[0x02, 0x03, 0xF8, 0x04, 0x04],
+            Commands::StartAccelerometryStream => &[0x02, 0x03, 0xF8, 0x04, 0x04],
+            Commands::StartPressureStream => &[0x02, 0x03, 0xF8, 0x01, 0x04],
             Commands::StopStream => &[0x02, 0x01, 0x02],
         }
     }
@@ -144,7 +169,7 @@ impl Mitch {
         Ok(())
     }
 
-    pub(crate) async fn start_recording(&mut self) -> MitchResult<()> {
+    pub(crate) async fn start_recording(&mut self, rec_type: Recording) -> MitchResult<()> {
         let c = self.per.characteristics();
         let data_char = c.iter().find(|c| c.uuid == DATA_CHAR).unwrap();
         self.per.subscribe(data_char).await?;
@@ -152,7 +177,7 @@ impl Mitch {
         self.per
             .write(
                 cmd_char,
-                Commands::StartStream.as_ref(),
+                Commands::from(rec_type).as_ref(),
                 WriteType::WithResponse,
             )
             .await?;
@@ -160,22 +185,31 @@ impl Mitch {
         let mut s = self.per.notifications().await?;
         let stream_name = self.name.clone();
         let handle = spawn(async move {
-            let info = MyInfo::new(&stream_name);
-            let outlet = MyOutlet(StreamOutlet::new(&info.0, 360, 0).unwrap());
+            let info = rec_type.info(stream_name.as_str());
+            let outlet = MyOutlet(StreamOutlet::new(&info.0, 1, 360).unwrap());
             while let Some(b) = s.next().await {
                 if b.uuid != DATA_CHAR {
                     continue;
                 }
-                outlet
-                    .0
-                    .push_sample(&[
-                        i16::from_le_bytes([b.value[4], b.value[5]]),
-                        i16::from_le_bytes([b.value[6], b.value[7]]),
-                        i16::from_le_bytes([b.value[8], b.value[9]]),
-                    ])
-                    .unwrap();
+                match rec_type {
+                    Recording::Accelerometry => {
+                        outlet
+                            .0
+                            .push_sample(&[
+                                i16::from_le_bytes([b.value[4], b.value[5]]),
+                                i16::from_le_bytes([b.value[6], b.value[7]]),
+                                i16::from_le_bytes([b.value[8], b.value[9]]),
+                            ])
+                            .unwrap();
+                    }
+                    Recording::Pressure => outlet
+                        .0
+                        .push_sample(&b.value[4..].iter().map(|b| *b as i16).collect::<Vec<i16>>())
+                        .unwrap(),
+                }
             }
         });
+        self.handle = Some(Arc::new(handle));
         self.update_state().await?;
         Ok(())
     }

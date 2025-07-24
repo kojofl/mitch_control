@@ -16,6 +16,7 @@
 	let mitches: Mitch[] = $state([]);
 	let details: any = $state();
 	let loading = $state(false);
+	let selected: number | undefined = $state(undefined);
 
 	onMount(async () => {
 		mitches = await invoke("get_mitches");
@@ -27,18 +28,18 @@
 			connected: false,
 		});
 	});
-	async function start_recording(i: number) {
+	async function start_recording() {
 		try {
-			await invoke("start_recording", { id: i });
-			details = await invoke("get_mitch_details", { id: i });
+			await invoke("start_recording", { id: selected});
+			details = await invoke("get_mitch_details", { id: selected});
 		} catch (e) {
 			console.log(e);
 		}
 	}
-	async function stop_recording(i: number) {
+	async function stop_recording() {
 		try {
-			await invoke("stop_recording", { id: i });
-			details = await invoke("get_mitch_details", { id: i });
+			await invoke("stop_recording", { id: selected});
+			details = await invoke("get_mitch_details", { id: selected});
 		} catch (e) {
 			console.log(e);
 		}
@@ -46,6 +47,8 @@
 	async function get_details(i: number) {
 		try {
 			details = await invoke("get_mitch_details", { id: i });
+			selected = i;
+			console.log(selected);
 		} catch (e) {
 			console.log(e);
 		}
@@ -72,7 +75,7 @@
 	}
 
 	function modalClose() {
-		details = undefined;
+		details= undefined;
 	}
 </script>
 
@@ -151,7 +154,7 @@
 												type="button"
 												class="btn preset-filled"
 												onclick={async () =>
-													await start_recording(i)}
+													await start_recording()}
 												>Start Recording</button
 											>
 										{:else}
@@ -159,7 +162,7 @@
 												type="button"
 												class="btn preset-filled"
 												onclick={async () =>
-													await stop_recording(i)}
+													await stop_recording()}
 												>Stop Recording</button
 											>
 										{/if}

@@ -143,7 +143,6 @@ impl Mitch {
         self.per.connect().await?;
         self.per.discover_services().await?;
         self.connected = true;
-        self.update_power().await?;
         self.update_state().await?;
         Ok(())
     }
@@ -229,10 +228,14 @@ impl Mitch {
                             ])
                             .unwrap();
                     }
-                    Recording::Pressure => outlet
-                        .0
-                        .push_sample(&b.value[4..].iter().map(|b| *b as i16).collect::<Vec<i16>>())
-                        .unwrap(),
+                    Recording::Pressure => {
+                        outlet
+                            .0
+                            .push_sample(
+                                &b.value[4..].iter().map(|b| *b as i16).collect::<Vec<i16>>(),
+                            )
+                            .unwrap();
+                    }
                 }
             }
         });

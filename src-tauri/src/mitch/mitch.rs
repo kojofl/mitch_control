@@ -19,6 +19,7 @@ pub struct Mitch {
     pub name: String,
     connected: bool,
     state: Option<MitchState>,
+    power: Option<u8>,
     #[serde(skip)]
     per: Peripheral,
     #[serde(skip)]
@@ -29,6 +30,7 @@ pub struct Mitch {
 pub struct SerializableMitch {
     pub name: String,
     connected: bool,
+    power: Option<u8>,
     state: Option<MitchState>,
 }
 
@@ -37,6 +39,7 @@ impl From<&Mitch> for SerializableMitch {
         Self {
             name: value.name.clone(),
             connected: value.connected,
+            power: value.power,
             state: value.state,
         }
     }
@@ -95,6 +98,7 @@ impl TryFrom<u8> for MitchState {
 
 enum Commands {
     GetState,
+    GetPower,
     StartAccelerometryStream,
     StartPressureStream,
     StopStream,
@@ -116,6 +120,7 @@ impl AsRef<[u8]> for Commands {
             Commands::StartAccelerometryStream => &[0x02, 0x03, 0xF8, 0x04, 0x04],
             Commands::StartPressureStream => &[0x02, 0x03, 0xF8, 0x01, 0x04],
             Commands::StopStream => &[0x02, 0x01, 0x02],
+            Commands::GetPower => &[87, 0],
         }
     }
 }
@@ -128,6 +133,7 @@ impl Mitch {
             name: name.to_owned(),
             connected: false,
             state: None,
+            power: None,
             per,
             handle: None,
         }
@@ -137,6 +143,7 @@ impl Mitch {
         self.per.connect().await?;
         self.per.discover_services().await?;
         self.connected = true;
+        self.update_power().await?;
         self.update_state().await?;
         Ok(())
     }
@@ -161,11 +168,31 @@ impl Mitch {
         {
             Err(_) => {
                 self.state = None;
+                self.power = None;
                 self.connected = false;
+                return MitchResult::Err("Failed to update state".into());
             }
             _ => {}
         }
         self.state = Some(MitchState::try_from(self.per.read(cmd_char).await?[4])?);
+        match self
+            .per
+            .write(
+                cmd_char,
+                Commands::GetPower.as_ref(),
+                btleplug::api::WriteType::WithResponse,
+            )
+            .await
+        {
+            Err(_) => {
+                self.state = None;
+                self.power = None;
+                self.connected = false;
+                return MitchResult::Err("Failed to update power".into());
+            }
+            _ => {}
+        }
+        self.power = Some(self.per.read(cmd_char).await?[4]);
         Ok(())
     }
 
